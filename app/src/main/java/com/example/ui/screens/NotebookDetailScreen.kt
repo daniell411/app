@@ -47,12 +47,13 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -79,6 +80,7 @@ import com.example.data.model.Attachment
 import com.example.data.model.ChecklistItem
 import com.example.data.model.Note
 import com.example.data.model.Notebook
+import com.example.ui.components.ReminderCard
 import com.example.ui.theme.ApuntaGreen
 import com.example.ui.theme.ApuntaIndigo
 import com.example.ui.theme.ApuntaOrange
@@ -105,25 +107,33 @@ fun NotebookDetailScreen(
         parseHexColor(notebook.color)
     }
 
+    val allReminders by viewModel.todayReminders.collectAsState()
+    val notebookReminders = remember(allReminders, notebookId) {
+        allReminders.filter { it.reminder.notebookId == notebookId }
+    }
+
     val notes by viewModel.getNotesForNotebook(notebookId).collectAsState(initial = emptyList())
     val attachments by viewModel.getAttachmentsForNotebook(notebookId).collectAsState(initial = emptyList())
     val appLinks by viewModel.getAppLinksForNotebook(notebookId).collectAsState(initial = emptyList())
     val checklist by viewModel.getChecklistForNotebook(notebookId).collectAsState(initial = emptyList())
 
     var selectedInternalTab by remember { mutableIntStateOf(0) }
-    val tabTitles = listOf("Notas", "Archivos", "Apps y Links", "Checklist")
+    val tabTitles = listOf("Recordatorios", "Notas", "Archivos", "Apps y Links", "Checklist")
+
+    // Filter inside Notebook's Recordatorios
+    var reminderFilter by remember { mutableStateOf("TODOS") }
 
     // State for creating new items
     var newNoteText by remember { mutableStateOf("") }
     var newChecklistText by remember { mutableStateOf("") }
-    var showAddLinkDialog by remember { mutableStateOf(false) }
+    var showInlineAddLink by remember { mutableStateOf(false) }
 
     // Visual media picker for photos/attachments
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
-            val fileName = "Adjunto_${System.currentTimeMillis()}.jpg"
+            val fileName = "Adjunto_${System.currentTimeMillis() % 10000}.jpg"
             viewModel.addAttachmentToNotebook(
                 notebookId = notebookId,
                 type = "image",
@@ -166,89 +176,69 @@ fun NotebookDetailScreen(
 
                     Spacer(modifier = Modifier.width(6.dp))
 
-                    Text(
-                        text = notebook.name,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color.White.copy(alpha = 0.2f)
-                    ) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = notebook.label.ifBlank { "Cuaderno" },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            fontWeight = FontWeight.SemiBold
+                            text = notebook.name,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "Cuaderno • ${notebook.label}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.85f)
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Metadata row: Status + Repeat indicator
+                // Stats badges
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 48.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = Color.White.copy(alpha = 0.22f)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Activo",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Text(
+                            text = "${notebookReminders.size} recordatorios",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
                     }
 
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = Color.White.copy(alpha = 0.15f)
+                        color = Color.White.copy(alpha = 0.18f)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.Repeat,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Sin repetición",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White
-                            )
-                        }
+                        Text(
+                            text = "${notes.size} notas",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White.copy(alpha = 0.18f)
+                    ) {
+                        Text(
+                            text = "${checklist.size} tareas",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
                     }
                 }
             }
         }
 
-        // 4 Internal Sub-tabs (Notas, Archivos, Apps y Links, Checklist)
+        // 5 Internal Sub-tabs (Recordatorios, Notas, Archivos, Apps y Links, Checklist)
         ScrollableTabRow(
             selectedTabIndex = selectedInternalTab,
             edgePadding = 16.dp,
@@ -277,15 +267,94 @@ fun NotebookDetailScreen(
                 .background(MaterialTheme.colorScheme.background)
         ) {
             when (selectedInternalTab) {
-                // TAB 1: NOTAS
+                // TAB 0: RECORDATORIOS (incluye filtro de Completados)
                 0 -> {
+                    val filteredRem = remember(notebookReminders, reminderFilter) {
+                        when (reminderFilter) {
+                            "PENDIENTES" -> notebookReminders.filter { it.reminder.status != "DONE" }
+                            "COMPLETADOS" -> notebookReminders.filter { it.reminder.status == "DONE" }
+                            else -> notebookReminders
+                        }
+                    }
+
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (notebookReminders.isNotEmpty()) {
+                            item {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    listOf("TODOS" to "Todos", "PENDIENTES" to "Pendientes", "COMPLETADOS" to "Completados").forEach { (code, label) ->
+                                        FilterChip(
+                                            selected = reminderFilter == code,
+                                            onClick = { reminderFilter = code },
+                                            label = { Text(label, fontSize = 12.sp) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = notebookColor,
+                                                selectedLabelColor = Color.White
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (filteredRem.isEmpty()) {
+                            item {
+                                Card(
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = if (reminderFilter == "COMPLETADOS") "No tenés recordatorios completados en este cuaderno"
+                                            else "No hay recordatorios registrados en este cuaderno",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Button(
+                                            onClick = { viewModel.openListeningSheet() },
+                                            colors = ButtonDefaults.buttonColors(containerColor = notebookColor),
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Apuntar recordatorio", fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            items(filteredRem, key = { it.reminder.id }) { item ->
+                                ReminderCard(
+                                    item = item,
+                                    onOpenNotebook = {},
+                                    onToggleDone = { viewModel.toggleReminderDone(item.reminder.id) },
+                                    onSnooze = { viewModel.snoozeReminder(item.reminder.id, 20) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // TAB 1: NOTAS
+                1 -> {
+                    var newLinkLabel by remember { mutableStateOf("") }
+                    var newLinkUrl by remember { mutableStateOf("") }
+
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         item {
-                            // Free text note editor with auto-save & dictation button
+                            // Free text note editor
                             Card(
                                 shape = RoundedCornerShape(16.dp),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -295,7 +364,7 @@ fun NotebookDetailScreen(
                                     OutlinedTextField(
                                         value = newNoteText,
                                         onValueChange = { newNoteText = it },
-                                        placeholder = { Text("Escribí una nota o dictá con voz...") },
+                                        placeholder = { Text("Escribí una nota...") },
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(96.dp)
@@ -310,19 +379,32 @@ fun NotebookDetailScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Button(
-                                            onClick = {
-                                                viewModel.openListeningSheet()
-                                            },
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                            ),
-                                            shape = RoundedCornerShape(10.dp)
-                                        ) {
-                                            Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Dictar por voz", fontSize = 12.sp)
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Button(
+                                                onClick = { viewModel.openListeningSheet() },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                                ),
+                                                shape = RoundedCornerShape(10.dp)
+                                            ) {
+                                                Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Dictar con voz", fontSize = 12.sp)
+                                            }
+
+                                            Button(
+                                                onClick = { showInlineAddLink = !showInlineAddLink },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                                ),
+                                                shape = RoundedCornerShape(10.dp)
+                                            ) {
+                                                Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Vincular app/link", fontSize = 12.sp)
+                                            }
                                         }
 
                                         Button(
@@ -338,66 +420,104 @@ fun NotebookDetailScreen(
                                         ) {
                                             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Guardar nota", fontSize = 12.sp)
+                                            Text("Guardar", fontSize = 12.sp)
+                                        }
+                                    }
+
+                                    // Inline option to attach a link/app to this notebook
+                                    if (showInlineAddLink) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Text("Vincular App o Enlace Web", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                                                OutlinedTextField(
+                                                    value = newLinkLabel,
+                                                    onValueChange = { newLinkLabel = it },
+                                                    placeholder = { Text("Nombre (ej. Documentos, Notion)") },
+                                                    singleLine = true,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                                OutlinedTextField(
+                                                    value = newLinkUrl,
+                                                    onValueChange = { newLinkUrl = it },
+                                                    placeholder = { Text("URL (ej. https://...)") },
+                                                    singleLine = true,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                                Button(
+                                                    onClick = {
+                                                        if (newLinkLabel.isNotBlank() && newLinkUrl.isNotBlank()) {
+                                                            viewModel.addAppLinkToNotebook(
+                                                                notebookId = notebookId,
+                                                                label = newLinkLabel.trim(),
+                                                                url = newLinkUrl.trim(),
+                                                                icon = "web"
+                                                            )
+                                                            newLinkLabel = ""
+                                                            newLinkUrl = ""
+                                                            showInlineAddLink = false
+                                                        }
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = notebookColor),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    modifier = Modifier.align(Alignment.End)
+                                                ) {
+                                                    Text("Guardar enlace", fontSize = 12.sp)
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
 
-                        items(notes, key = { it.id }) { note ->
-                            NoteCard(
-                                note = note,
-                                onDelete = { viewModel.deleteNote(note) }
-                            )
+                        if (notes.isEmpty()) {
+                            item {
+                                Text(
+                                    text = "No tenés notas en este cuaderno. Escribí una arriba o dictala con voz.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(vertical = 16.dp)
+                                )
+                            }
+                        } else {
+                            items(notes, key = { it.id }) { note ->
+                                NoteCard(
+                                    note = note,
+                                    onDelete = { viewModel.deleteNote(note) }
+                                )
+                            }
                         }
                     }
                 }
 
                 // TAB 2: ARCHIVOS
-                1 -> {
+                2 -> {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            Button(
+                                onClick = {
+                                    photoPickerLauncher.launch(
+                                        androidx.activity.result.PickVisualMediaRequest(
+                                            ActivityResultContracts.PickVisualMedia.ImageOnly
+                                        )
+                                    )
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = notebookColor),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Button(
-                                    onClick = {
-                                        photoPickerLauncher.launch(
-                                            androidx.activity.result.PickVisualMediaRequest(
-                                                ActivityResultContracts.PickVisualMedia.ImageOnly
-                                            )
-                                        )
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = notebookColor),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(Icons.Default.AttachFile, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Subir imagen / PDF", fontSize = 13.sp)
-                                }
-
-                                Button(
-                                    onClick = {
-                                        viewModel.addAttachmentToNotebook(
-                                            notebookId = notebookId,
-                                            type = "pdf",
-                                            uri = "content://sample/informe_tecnico.pdf",
-                                            name = "informe_tecnico_${System.currentTimeMillis() % 1000}.pdf",
-                                            size = "2.1 MB"
-                                        )
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Text("+ PDF Ejemplo", fontSize = 12.sp)
-                                }
+                                Icon(Icons.Default.AttachFile, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Adjuntar imagen de la galería", fontSize = 13.sp)
                             }
                         }
 
@@ -415,7 +535,6 @@ fun NotebookDetailScreen(
                                 AttachmentCard(
                                     attachment = attachment,
                                     onOpen = {
-                                        // Open sample/document via Intent
                                         try {
                                             val intent = Intent(Intent.ACTION_VIEW).apply {
                                                 data = Uri.parse("https://www.google.com")
@@ -430,7 +549,7 @@ fun NotebookDetailScreen(
                 }
 
                 // TAB 3: APPS Y LINKS
-                2 -> {
+                3 -> {
                     var newLinkLabel by remember { mutableStateOf("") }
                     var newLinkUrl by remember { mutableStateOf("") }
 
@@ -455,7 +574,7 @@ fun NotebookDetailScreen(
                                     OutlinedTextField(
                                         value = newLinkLabel,
                                         onValueChange = { newLinkLabel = it },
-                                        label = { Text("Nombre (ej. Notion, Google Drive, WhatsApp)") },
+                                        label = { Text("Nombre (ej. Notion, Google Drive)") },
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(10.dp),
                                         singleLine = true
@@ -464,7 +583,7 @@ fun NotebookDetailScreen(
                                     OutlinedTextField(
                                         value = newLinkUrl,
                                         onValueChange = { newLinkUrl = it },
-                                        label = { Text("URL o esquema (ej. https://...)") },
+                                        label = { Text("URL o enlace (ej. https://...)") },
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(10.dp),
                                         singleLine = true
@@ -495,26 +614,37 @@ fun NotebookDetailScreen(
                             }
                         }
 
-                        items(appLinks, key = { it.id }) { link ->
-                            AppLinkCard(
-                                link = link,
-                                onOpen = {
-                                    try {
-                                        val uri = if (link.url.startsWith("http://") || link.url.startsWith("https://")) {
-                                            Uri.parse(link.url)
-                                        } else {
-                                            Uri.parse("https://${link.url}")
-                                        }
-                                        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                                    } catch (_: Exception) {}
-                                }
-                            )
+                        if (appLinks.isEmpty()) {
+                            item {
+                                Text(
+                                    text = "No tenés enlaces ni apps vinculadas en este cuaderno.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(vertical = 16.dp)
+                                )
+                            }
+                        } else {
+                            items(appLinks, key = { it.id }) { link ->
+                                AppLinkCard(
+                                    link = link,
+                                    onOpen = {
+                                        try {
+                                            val uri = if (link.url.startsWith("http://") || link.url.startsWith("https://")) {
+                                                Uri.parse(link.url)
+                                            } else {
+                                                Uri.parse("https://${link.url}")
+                                            }
+                                            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                                        } catch (_: Exception) {}
+                                    }
+                                )
+                            }
                         }
                     }
                 }
 
                 // TAB 4: CHECKLIST
-                3 -> {
+                4 -> {
                     val doneCount = checklist.count { it.done }
                     val totalCount = checklist.size
                     val progress = if (totalCount > 0) doneCount.toFloat() / totalCount.toFloat() else 0f
@@ -538,12 +668,12 @@ fun NotebookDetailScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = "Progreso de subtareas",
+                                            text = "Progreso del checklist",
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            text = "$doneCount de $totalCount hechas",
+                                            text = "$doneCount de $totalCount hechos",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = if (doneCount == totalCount && totalCount > 0) ApuntaGreen else ApuntaOrange,
                                             fontWeight = FontWeight.Bold

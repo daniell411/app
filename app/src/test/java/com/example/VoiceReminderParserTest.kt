@@ -67,4 +67,12 @@ class VoiceReminderParserTest {
         assertEquals(VoiceCommandType.SEARCH_NOTES, searchResult.commandType)
         assertTrue(searchResult.commandParam.contains("informe de Eduardo"))
     }
+
+    @Test
+    fun testEyApuntaPrefix() {
+        val input = "Ey Apunta: mañana a las 3 reunión de equipo"
+        val result = VoiceReminderParser.parse(input, sampleNotebooks)
+        assertTrue(result.title.contains("reunión de equipo", ignoreCase = true))
+        assertNotNull(result.timestampMillis)
+    }
 }

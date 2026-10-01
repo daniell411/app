@@ -78,8 +78,8 @@ object VoiceReminderParser {
         }
 
         // 2. Reminder Creation Flow: "Apunta: mañana a las 3 entregar el informe de robótica a Eduardo, y recordámelo una hora antes"
-        // Strip initial trigger prefix ("Apunta:", "Apunta", "Recordame", "Anotar", etc.)
-        input = input.replace(Regex("^(?:apunta:?|apuntá:?|anota:?|anotá:?|recordame:?|recordámelo:?)\\s*", RegexOption.IGNORE_CASE), "")
+        // Strip initial trigger prefix ("Ey Apunta:", "Apunta:", "Apunta", "Recordame", "Anotar", etc.)
+        input = input.replace(Regex("^(?:ey\\s+apunta:?|oye\\s+apunta:?|apunta:?|apuntá:?|anota:?|anotá:?|recordame:?|recordámelo:?)\\s*", RegexOption.IGNORE_CASE), "")
 
         // Extract lead time / aviso previo (e.g. "y recordámelo una hora antes", "avísame 30 minutos antes", "10 minutos antes")
         var leadTimeMinutes = 0

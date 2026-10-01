@@ -19,7 +19,7 @@ class ReminderNotificationReceiver : BroadcastReceiver() {
         val action = intent.action ?: return
         val reminderId = intent.getStringExtra(NotificationHelper.EXTRA_REMINDER_ID) ?: return
 
-        val database = ApuntaDatabase.getDatabase(context, CoroutineScope(Dispatchers.IO))
+        val database = ApuntaDatabase.getDatabase(context)
 
         when (action) {
             NotificationHelper.ACTION_TRIGGER_REMINDER -> {

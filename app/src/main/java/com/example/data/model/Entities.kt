@@ -11,7 +11,8 @@ data class Notebook(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),
     val name: String,
     val color: String, // hex, e.g. #4F46E5
-    val label: String = "", // e.g. Robótica, Datos, Personal
+    val label: String = "", // e.g. Trabajo, Estudio, Personal
+    val isSample: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -36,8 +37,9 @@ data class Reminder(
     val status: String = "PENDING", // PENDING, IN_PROGRESS, DONE
     val notebookId: String? = null,
     val escalated: Boolean = false,
+    val isSample: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
-    val locationTrigger: String = "" // e.g., "Casa", "Colegio"
+    val locationTrigger: String = ""
 )
 
 @Entity(
@@ -49,6 +51,7 @@ data class Note(
     val notebookId: String,
     val reminderId: String? = null,
     val text: String,
+    val isSample: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -63,6 +66,7 @@ data class Attachment(
     val uri: String,
     val name: String,
     val sizeFormatted: String = "1.2 MB",
+    val isSample: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -75,7 +79,8 @@ data class AppLink(
     val notebookId: String,
     val label: String, // Drive, Notion, Classroom, WhatsApp, Web
     val url: String, // url or scheme
-    val icon: String // "drive", "notion", "classroom", "whatsapp", "web"
+    val icon: String, // "drive", "notion", "classroom", "whatsapp", "web"
+    val isSample: Boolean = false
 )
 
 @Entity(
@@ -87,7 +92,8 @@ data class ChecklistItem(
     val notebookId: String,
     val text: String,
     val done: Boolean = false,
-    val orderIndex: Int = 0
+    val orderIndex: Int = 0,
+    val isSample: Boolean = false
 )
 
 data class ReminderWithNotebook(

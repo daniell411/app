@@ -4,16 +4,12 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.model.AppLink
 import com.example.data.model.Attachment
 import com.example.data.model.ChecklistItem
 import com.example.data.model.Note
 import com.example.data.model.Notebook
 import com.example.data.model.Reminder
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import java.util.Calendar
 
 @Database(
@@ -25,7 +21,7 @@ import java.util.Calendar
         AppLink::class,
         ChecklistItem::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class ApuntaDatabase : RoomDatabase() {
@@ -40,32 +36,40 @@ abstract class ApuntaDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: ApuntaDatabase? = null
 
-        fun getDatabase(context: Context, scope: CoroutineScope): ApuntaDatabase {
+        fun getDatabase(context: Context): ApuntaDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     ApuntaDatabase::class.java,
                     "apunta_database"
                 )
-                    .addCallback(DatabaseCallback(scope))
+                    .fallbackToDestructiveMigration()
+                    // Starts empty without auto-seeding
                     .build()
                 INSTANCE = instance
                 instance
             }
         }
 
-        private class DatabaseCallback(private val scope: CoroutineScope) : RoomDatabase.Callback() {
-            override fun onCreate(db: SupportSQLiteDatabase) {
-                super.onCreate(db)
-                INSTANCE?.let { database ->
-                    scope.launch(Dispatchers.IO) {
-                        seedInitialData(database)
-                    }
-                }
-            }
+        suspend fun clearAllData(database: ApuntaDatabase) {
+            database.reminderDao().deleteAllReminders()
+            database.noteDao().deleteAllNotes()
+            database.attachmentDao().deleteAllAttachments()
+            database.appLinkDao().deleteAllLinks()
+            database.checklistDao().deleteAllChecklistItems()
+            database.notebookDao().deleteAllNotebooks()
         }
 
-        suspend fun seedInitialData(database: ApuntaDatabase) {
+        suspend fun clearSampleData(database: ApuntaDatabase) {
+            database.reminderDao().deleteSampleReminders()
+            database.noteDao().deleteSampleNotes()
+            database.attachmentDao().deleteSampleAttachments()
+            database.appLinkDao().deleteSampleLinks()
+            database.checklistDao().deleteSampleChecklistItems()
+            database.notebookDao().deleteSampleNotebooks()
+        }
+
+        suspend fun seedSampleData(database: ApuntaDatabase) {
             val notebookDao = database.notebookDao()
             val reminderDao = database.reminderDao()
             val noteDao = database.noteDao()
@@ -73,252 +77,183 @@ abstract class ApuntaDatabase : RoomDatabase() {
             val appLinkDao = database.appLinkDao()
             val checklistDao = database.checklistDao()
 
-            val roboticaId = "nb-robotica"
-            val datosId = "nb-datos"
+            val trabajoId = "nb-trabajo"
+            val estudioId = "nb-estudio"
             val personalId = "nb-personal"
 
-            val cal = Calendar.getInstance()
-
-            // 1. Notebooks
+            // Cuadernos de ejemplo
             notebookDao.insertNotebook(
                 Notebook(
-                    id = roboticaId,
-                    name = "Robótica",
-                    color = "#4F46E5", // Índigo
-                    label = "Robótica"
+                    id = trabajoId,
+                    name = "Trabajo",
+                    color = "#4F46E5",
+                    label = "Trabajo",
+                    isSample = true
                 )
             )
             notebookDao.insertNotebook(
                 Notebook(
-                    id = datosId,
-                    name = "Datos",
-                    color = "#06B6D4", // Celeste
-                    label = "Datos"
+                    id = estudioId,
+                    name = "Estudio",
+                    color = "#06B6D4",
+                    label = "Estudio",
+                    isSample = true
                 )
             )
             notebookDao.insertNotebook(
                 Notebook(
                     id = personalId,
                     name = "Personal",
-                    color = "#F59E0B", // Naranja
-                    label = "Personal"
+                    color = "#F59E0B",
+                    label = "Personal",
+                    isSample = true
                 )
             )
 
-            // 2. Reminders
-            // Reminder 1: Today at 3:00 PM - Entregar informe de robótica a Eduardo
+            val cal = Calendar.getInstance()
+
+            // Recordatorio 1: Hoy a las 15:00
             cal.set(Calendar.HOUR_OF_DAY, 15)
             cal.set(Calendar.MINUTE, 0)
             cal.set(Calendar.SECOND, 0)
-            val timeReport = cal.timeInMillis
-
-            val r1Id = "rem-1"
+            val r1Id = "rem-sample-1"
             reminderDao.insertReminder(
                 Reminder(
                     id = r1Id,
-                    title = "Entregar informe de robótica a Eduardo",
-                    datetime = timeReport,
-                    leadTimeMinutes = 60,
+                    title = "Revisión trimestral de proyectos",
+                    datetime = cal.timeInMillis,
+                    leadTimeMinutes = 30,
                     repeatRule = "NONE",
                     status = "PENDING",
-                    notebookId = roboticaId,
-                    escalated = true
+                    notebookId = trabajoId,
+                    escalated = true,
+                    isSample = true
                 )
             )
             noteDao.insertNote(
                 Note(
-                    notebookId = roboticaId,
+                    notebookId = trabajoId,
                     reminderId = r1Id,
-                    text = "Verificar calibración de motores paso a paso y conclusiones del laboratorio con Eduardo antes de enviar."
-                )
-            )
-            attachmentDao.insertAttachment(
-                Attachment(
-                    notebookId = roboticaId,
-                    type = "pdf",
-                    uri = "content://sample/informe_sensores_v2.pdf",
-                    name = "informe_sensores_v2.pdf",
-                    sizeFormatted = "2.4 MB"
+                    text = "Preparar métricas de avance y resumen ejecutivo para el equipo.",
+                    isSample = true
                 )
             )
             appLinkDao.insertLink(
                 AppLink(
-                    notebookId = roboticaId,
+                    notebookId = trabajoId,
                     label = "Google Drive",
                     url = "https://drive.google.com",
-                    icon = "drive"
-                )
-            )
-            appLinkDao.insertLink(
-                AppLink(
-                    notebookId = roboticaId,
-                    label = "Notion Lab",
-                    url = "https://notion.so",
-                    icon = "notion"
+                    icon = "drive",
+                    isSample = true
                 )
             )
             checklistDao.insertItem(
                 ChecklistItem(
-                    notebookId = roboticaId,
-                    text = "Revisar gráficos de par motor",
+                    notebookId = trabajoId,
+                    text = "Verificar datos consolidados",
                     done = true,
-                    orderIndex = 0
+                    orderIndex = 0,
+                    isSample = true
                 )
             )
             checklistDao.insertItem(
                 ChecklistItem(
-                    notebookId = roboticaId,
-                    text = "Imprimir conclusiones en formato IEEE",
+                    notebookId = trabajoId,
+                    text = "Generar gráfico de rendimiento",
                     done = false,
-                    orderIndex = 1
-                )
-            )
-            checklistDao.insertItem(
-                ChecklistItem(
-                    notebookId = roboticaId,
-                    text = "Enviar copia en PDF a Eduardo",
-                    done = false,
-                    orderIndex = 2
+                    orderIndex = 1,
+                    isSample = true
                 )
             )
 
-            // Reminder 2: Tomorrow at 10:00 AM - Examen parcial de Minería de Datos
+            // Recordatorio 2: Mañana a las 10:00
             val cal2 = Calendar.getInstance()
             cal2.add(Calendar.DAY_OF_YEAR, 1)
             cal2.set(Calendar.HOUR_OF_DAY, 10)
             cal2.set(Calendar.MINUTE, 0)
-            val r2Id = "rem-2"
+            val r2Id = "rem-sample-2"
             reminderDao.insertReminder(
                 Reminder(
                     id = r2Id,
-                    title = "Examen parcial de Minería de Datos",
+                    title = "Repasar para el examen final",
                     datetime = cal2.timeInMillis,
-                    leadTimeMinutes = 120,
+                    leadTimeMinutes = 60,
                     repeatRule = "NONE",
                     status = "PENDING",
-                    notebookId = datosId,
-                    escalated = true
+                    notebookId = estudioId,
+                    escalated = true,
+                    isSample = true
                 )
             )
             noteDao.insertNote(
                 Note(
-                    notebookId = datosId,
+                    notebookId = estudioId,
                     reminderId = r2Id,
-                    text = "Temas clave: Árboles de decisión, Random Forest, métricas de evaluación (F1-score, AUC-ROC) y preprocesamiento de outliers."
-                )
-            )
-            attachmentDao.insertAttachment(
-                Attachment(
-                    notebookId = datosId,
-                    type = "pdf",
-                    uri = "content://sample/guia_mineria_datos.pdf",
-                    name = "guia_mineria_datos.pdf",
-                    sizeFormatted = "3.8 MB"
-                )
-            )
-            appLinkDao.insertLink(
-                AppLink(
-                    notebookId = datosId,
-                    label = "Google Classroom",
-                    url = "https://classroom.google.com",
-                    icon = "classroom"
+                    text = "Revisar los capítulos 4, 5 y los resúmenes clave de clase.",
+                    isSample = true
                 )
             )
             checklistDao.insertItem(
                 ChecklistItem(
-                    notebookId = datosId,
-                    text = "Resolver ejercicios de prueba en Python",
-                    done = true,
-                    orderIndex = 0
-                )
-            )
-            checklistDao.insertItem(
-                ChecklistItem(
-                    notebookId = datosId,
-                    text = "Preparar hoja de fórmulas permitida",
+                    notebookId = estudioId,
+                    text = "Resolver ejercicios prácticos",
                     done = false,
-                    orderIndex = 1
+                    orderIndex = 0,
+                    isSample = true
                 )
             )
 
-            // Reminder 3: Today at 6:30 PM - Pagar la factura de energía eléctrica
+            // Recordatorio 3: Hoy a las 18:30
             val cal3 = Calendar.getInstance()
             cal3.set(Calendar.HOUR_OF_DAY, 18)
             cal3.set(Calendar.MINUTE, 30)
-            val r3Id = "rem-3"
+            val r3Id = "rem-sample-3"
             reminderDao.insertReminder(
                 Reminder(
                     id = r3Id,
-                    title = "Pagar la factura de energía eléctrica",
+                    title = "Comprar víveres para la semana",
                     datetime = cal3.timeInMillis,
-                    leadTimeMinutes = 30,
-                    repeatRule = "MONTHLY",
+                    leadTimeMinutes = 15,
+                    repeatRule = "NONE",
                     status = "PENDING",
-                    notebookId = personalId
+                    notebookId = personalId,
+                    isSample = true
                 )
             )
             checklistDao.insertItem(
                 ChecklistItem(
                     notebookId = personalId,
-                    text = "Ingresar a la app del banco",
-                    done = false,
-                    orderIndex = 0
+                    text = "Frutas y verduras frescas",
+                    done = true,
+                    orderIndex = 0,
+                    isSample = true
                 )
             )
             checklistDao.insertItem(
                 ChecklistItem(
                     notebookId = personalId,
-                    text = "Descargar comprobante en PDF",
+                    text = "Café y avena",
                     done = false,
-                    orderIndex = 1
+                    orderIndex = 1,
+                    isSample = true
                 )
             )
 
-            // Reminder 4: Today at 11:30 AM - Comprar sensores ultrasónicos HC-SR04
+            // Recordatorio 4: Completado
             val cal4 = Calendar.getInstance()
-            cal4.set(Calendar.HOUR_OF_DAY, 11)
+            cal4.set(Calendar.HOUR_OF_DAY, 8)
             cal4.set(Calendar.MINUTE, 30)
-            val r4Id = "rem-4"
+            val r4Id = "rem-sample-4"
             reminderDao.insertReminder(
                 Reminder(
                     id = r4Id,
-                    title = "Comprar sensores ultrasónicos HC-SR04",
+                    title = "Organizar el escritorio y notas",
                     datetime = cal4.timeInMillis,
-                    leadTimeMinutes = 15,
-                    repeatRule = "NONE",
-                    status = "IN_PROGRESS",
-                    notebookId = roboticaId
-                )
-            )
-            noteDao.insertNote(
-                Note(
-                    notebookId = roboticaId,
-                    reminderId = r4Id,
-                    text = "Comprar 4 unidades en la tienda de electrónica. Pedir factura con crédito fiscal para la universidad."
-                )
-            )
-
-            // Reminder 5: Today at 8:00 AM - Revisar métricas del dataset (Done)
-            val cal5 = Calendar.getInstance()
-            cal5.set(Calendar.HOUR_OF_DAY, 8)
-            cal5.set(Calendar.MINUTE, 0)
-            val r5Id = "rem-5"
-            reminderDao.insertReminder(
-                Reminder(
-                    id = r5Id,
-                    title = "Revisar métricas iniciales del dataset",
-                    datetime = cal5.timeInMillis,
                     leadTimeMinutes = 0,
                     repeatRule = "NONE",
                     status = "DONE",
-                    notebookId = datosId
-                )
-            )
-            noteDao.insertNote(
-                Note(
-                    notebookId = datosId,
-                    reminderId = r5Id,
-                    text = "Se limpiaron 1,420 filas nulas y se normalizaron los valores de timestamp a UTC-6."
+                    notebookId = personalId,
+                    isSample = true
                 )
             )
         }

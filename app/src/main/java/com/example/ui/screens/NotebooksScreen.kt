@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
@@ -26,8 +25,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -42,12 +42,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,12 +59,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.model.NotebookWithCounts
 import com.example.ui.components.NotebookCard
-import com.example.ui.components.ReminderCard
-import com.example.ui.theme.ApuntaGreen
 import com.example.ui.theme.ApuntaIndigo
 import com.example.ui.theme.NotebookPalette
+import com.example.ui.theme.parseHexColor
 import com.example.ui.viewmodel.ApuntaViewModel
 
 @Composable
@@ -74,14 +72,12 @@ fun NotebooksScreen(
     modifier: Modifier = Modifier
 ) {
     val notebooksWithCounts by viewModel.notebooksWithCounts.collectAsState()
-    val allReminders by viewModel.todayReminders.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedCategory by viewModel.selectedCategoryFilter.collectAsState()
 
     var showNewNotebookDialog by remember { mutableStateOf(false) }
-    var showArchiveSection by remember { mutableStateOf(false) }
 
-    // Filter notebooks
+    // Filter notebooks cleanly
     val filteredNotebooks = remember(notebooksWithCounts, searchQuery, selectedCategory) {
         notebooksWithCounts.filter { item ->
             val matchesCategory = selectedCategory == "Todos" ||
@@ -94,18 +90,13 @@ fun NotebooksScreen(
         }
     }
 
-    // Filter archived / completed reminders
-    val completedReminders = remember(allReminders, searchQuery) {
-        allReminders.filter { it.reminder.status == "DONE" && (searchQuery.isBlank() || it.reminder.title.contains(searchQuery, ignoreCase = true)) }
-    }
-
+    // Dynamic category list from user's actual notebooks (no hardcoded personal labels)
     val categories = remember(notebooksWithCounts) {
-        val uniqueLabels = notebooksWithCounts.map { it.notebook.label }.filter { it.isNotBlank() }.distinct()
-        listOf("Todos") + (if (uniqueLabels.contains("Robótica")) emptyList() else listOf("Robótica")) +
-                (if (uniqueLabels.contains("Datos")) emptyList() else listOf("Datos")) +
-                (if (uniqueLabels.contains("Personal")) emptyList() else listOf("Personal")) +
-                (if (uniqueLabels.contains("Trading")) emptyList() else listOf("Trading")) +
-                uniqueLabels
+        val uniqueLabels = notebooksWithCounts
+            .map { it.notebook.label.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        listOf("Todos") + uniqueLabels
     }
 
     Column(
@@ -113,7 +104,7 @@ fun NotebooksScreen(
             .fillMaxSize()
             .testTag("notebooks_screen")
     ) {
-        // Search bar
+        // Search bar & Add Notebook button on top
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -166,177 +157,189 @@ fun NotebooksScreen(
             }
         }
 
-        // Category filter chips
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            categories.forEach { cat ->
-                FilterChip(
-                    selected = selectedCategory == cat,
-                    onClick = { viewModel.setCategoryFilter(cat) },
-                    label = { Text(cat, fontSize = 12.sp) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = ApuntaIndigo,
-                        selectedLabelColor = Color.White
-                    ),
-                    shape = RoundedCornerShape(10.dp)
-                )
+        // Category Filter Chips
+        if (categories.size > 1) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                categories.forEach { category ->
+                    val isSelected = selectedCategory == category
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { viewModel.setCategoryFilter(category) },
+                        label = { Text(category, fontSize = 12.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = ApuntaIndigo,
+                            selectedLabelColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
             }
+        } else {
+            Spacer(modifier = Modifier.height(10.dp))
         }
 
-        // 2-Column Grid of Notebooks
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(filteredNotebooks, key = { it.notebook.id }) { item ->
-                NotebookCard(
-                    item = item,
-                    onClick = { onOpenNotebook(item.notebook.id) }
-                )
-            }
-
-            // Section "Archivo" button & list
-            item(span = { GridItemSpan(2) }) {
+        // Notebooks Grid / Empty state
+        if (filteredNotebooks.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp)
-                        .clickable { showArchiveSection = !showArchiveSection },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(ApuntaIndigo.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Archive,
+                                imageVector = Icons.Default.MenuBook,
                                 contentDescription = null,
-                                tint = ApuntaGreen,
-                                modifier = Modifier.size(20.dp)
+                                tint = ApuntaIndigo,
+                                modifier = Modifier.size(32.dp)
                             )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "Archivo de recordatorios",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "${completedReminders.size} recordatorios cumplidos",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
                         }
 
+                        Spacer(modifier = Modifier.height(14.dp))
+
                         Text(
-                            text = if (showArchiveSection) "Ocultar" else "Ver",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = ApuntaIndigo,
-                            fontWeight = FontWeight.Bold
+                            text = if (searchQuery.isNotBlank()) "No se encontraron cuadernos" else "Aún no tenés cuadernos",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Text(
+                            text = if (searchQuery.isNotBlank()) "Probá con otra palabra de búsqueda"
+                            else "Cada recordatorio tiene su propio cuaderno para notas, archivos y checklists.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { showNewNotebookDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = ApuntaIndigo),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Crear cuaderno")
+                            }
+
+                            if (notebooksWithCounts.isEmpty()) {
+                                OutlinedButton(
+                                    onClick = { viewModel.loadSampleData() },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Cargar ejemplos")
+                                }
+                            }
+                        }
                     }
                 }
             }
-
-            if (showArchiveSection) {
-                if (completedReminders.isEmpty()) {
-                    item(span = { GridItemSpan(2) }) {
-                        Text(
-                            text = "No hay recordatorios archivados.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    }
-                } else {
-                    items(completedReminders, span = { GridItemSpan(2) }) { item ->
-                        ReminderCard(
-                            item = item,
-                            onOpenNotebook = {
-                                item.reminder.notebookId?.let { nbId ->
-                                    onOpenNotebook(nbId)
-                                }
-                            },
-                            onToggleDone = { viewModel.toggleReminderDone(item.reminder.id) },
-                            onSnooze = { viewModel.snoozeReminder(item.reminder.id) }
-                        )
-                    }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 96.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(
+                    items = filteredNotebooks,
+                    key = { it.notebook.id }
+                ) { item ->
+                    NotebookCard(
+                        item = item,
+                        onClick = { onOpenNotebook(item.notebook.id) }
+                    )
                 }
             }
         }
     }
 
-    // New Notebook Dialog
+    // Dialog for creating a new Notebook
     if (showNewNotebookDialog) {
-        var notebookName by remember { mutableStateOf("") }
-        var notebookLabel by remember { mutableStateOf("") }
-        var selectedColorHex by remember { mutableStateOf(NotebookPalette.first().first) }
+        var newNotebookName by remember { mutableStateOf("") }
+        var newNotebookLabel by remember { mutableStateOf("") }
+        var selectedColorIdx by remember { mutableIntStateOf(0) }
 
         AlertDialog(
             onDismissRequest = { showNewNotebookDialog = false },
-            title = { Text("Nuevo Cuaderno", fontWeight = FontWeight.Bold) },
+            title = {
+                Text("Nuevo Cuaderno", fontWeight = FontWeight.Bold)
+            },
             text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
-                        value = notebookName,
-                        onValueChange = { notebookName = it },
-                        label = { Text("Título del cuaderno") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true
+                        value = newNotebookName,
+                        onValueChange = { newNotebookName = it },
+                        label = { Text("Nombre del cuaderno") },
+                        placeholder = { Text("Ej. Finanzas, Trabajo...") },
+                        modifier = Modifier.fillMaxWidth().testTag("dialog_notebook_name"),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
+
                     OutlinedTextField(
-                        value = notebookLabel,
-                        onValueChange = { notebookLabel = it },
-                        label = { Text("Materia o etiqueta (opcional)") },
+                        value = newNotebookLabel,
+                        onValueChange = { newNotebookLabel = it },
+                        label = { Text("Etiqueta o Categoría (opcional)") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
                     )
-                    Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
-                        text = "Elegí el color del cuaderno (8 colores):",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Color del lomo:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
 
-                    // 8-color palette selector
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        NotebookPalette.forEach { (hex, color) ->
-                            val isSelected = selectedColorHex == hex
+                        NotebookPalette.forEachIndexed { index, pair ->
+                            val color = pair.second
+                            val isSelected = selectedColorIdx == index
                             Box(
                                 modifier = Modifier
-                                    .size(34.dp)
+                                    .size(32.dp)
                                     .clip(CircleShape)
                                     .background(color)
+                                    .clickable { selectedColorIdx = index }
                                     .border(
-                                        width = if (isSelected) 3.dp else 1.dp,
+                                        width = if (isSelected) 3.dp else 0.dp,
                                         color = if (isSelected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
                                         shape = CircleShape
                                     )
-                                    .clickable { selectedColorHex = hex }
                             )
                         }
                     }
@@ -345,26 +348,27 @@ fun NotebooksScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (notebookName.isNotBlank()) {
-                            viewModel.createNotebook(
-                                name = notebookName.trim(),
-                                colorHex = selectedColorHex,
-                                label = notebookLabel.trim()
-                            )
+                        val trimmed = newNotebookName.trim()
+                        if (trimmed.isNotBlank()) {
+                            val color = NotebookPalette.getOrElse(selectedColorIdx) { NotebookPalette[0] }.first
+                            val label = newNotebookLabel.trim().ifBlank { trimmed }
+                            viewModel.createNotebook(trimmed, color, label)
                             showNewNotebookDialog = false
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ApuntaIndigo),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("dialog_create_notebook_btn")
                 ) {
-                    Text("Crear cuaderno")
+                    Text("Crear")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showNewNotebookDialog = false }) {
                     Text("Cancelar")
                 }
-            }
+            },
+            shape = RoundedCornerShape(20.dp)
         )
     }
 }

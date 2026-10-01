@@ -231,7 +231,7 @@ fun CalendarScreen(
             )
 
             Text(
-                text = "${dayReminders.size} cosas",
+                text = "${dayReminders.size} recordatorios",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

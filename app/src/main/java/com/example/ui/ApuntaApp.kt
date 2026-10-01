@@ -27,14 +27,8 @@ import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Today
-import androidx.compose.material3.FabPosition
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -56,6 +50,7 @@ import com.example.ui.screens.NotebookDetailScreen
 import com.example.ui.screens.NotebooksScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.TodayScreen
+import com.example.ui.screens.WelcomeScreen
 import com.example.ui.theme.ApuntaIndigo
 import com.example.ui.theme.ApuntaTheme
 import com.example.ui.viewmodel.ApuntaTab
@@ -63,9 +58,9 @@ import com.example.ui.viewmodel.ApuntaViewModel
 
 @Composable
 fun ApuntaApp(viewModel: ApuntaViewModel) {
-    val themeMode by viewModel.themeMode.collectAsState()
+    val userPreferences by viewModel.userPreferences.collectAsState()
     val isSystemDark = isSystemInDarkTheme()
-    val useDarkTheme = when (themeMode) {
+    val useDarkTheme = when (userPreferences.themeMode) {
         "DARK" -> true
         "LIGHT" -> false
         else -> isSystemDark
@@ -77,7 +72,14 @@ fun ApuntaApp(viewModel: ApuntaViewModel) {
 
     ApuntaTheme(darkTheme = useDarkTheme) {
         Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            if (selectedNotebookId != null) {
+            // First run check: 1-step Welcome screen
+            if (!userPreferences.hasCompletedOnboarding) {
+                WelcomeScreen(
+                    onComplete = { name ->
+                        viewModel.completeOnboarding(name)
+                    }
+                )
+            } else if (selectedNotebookId != null) {
                 // Cuaderno Detail Screen
                 NotebookDetailScreen(
                     notebookId = selectedNotebookId!!,
@@ -85,7 +87,7 @@ fun ApuntaApp(viewModel: ApuntaViewModel) {
                     onBack = { viewModel.closeNotebook() }
                 )
             } else {
-                // Main Tab Scaffold
+                // Main Tab Scaffold with the 4 tabs in spec order: Hoy · Calendario · Cuadernos · Ajustes
                 Scaffold(
                     bottomBar = {
                         Box(
@@ -110,7 +112,7 @@ fun ApuntaApp(viewModel: ApuntaViewModel) {
                                     horizontalArrangement = Arrangement.SpaceAround,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // Tab 1: Hoy
+                                    // Pestaña 1: Hoy
                                     BottomNavItem(
                                         icon = Icons.Default.Today,
                                         label = "Hoy",
@@ -119,19 +121,7 @@ fun ApuntaApp(viewModel: ApuntaViewModel) {
                                         tag = "tab_hoy"
                                     )
 
-                                    // Tab 2: Cuadernos
-                                    BottomNavItem(
-                                        icon = Icons.Default.MenuBook,
-                                        label = "Cuadernos",
-                                        isSelected = currentTab == ApuntaTab.CUADERNOS,
-                                        onClick = { viewModel.selectTab(ApuntaTab.CUADERNOS) },
-                                        tag = "tab_cuadernos"
-                                    )
-
-                                    // Center gap for floating mic button
-                                    Spacer(modifier = Modifier.width(60.dp))
-
-                                    // Tab 3: Calendario
+                                    // Pestaña 2: Calendario
                                     BottomNavItem(
                                         icon = Icons.Default.CalendarMonth,
                                         label = "Calendario",
@@ -140,7 +130,19 @@ fun ApuntaApp(viewModel: ApuntaViewModel) {
                                         tag = "tab_calendario"
                                     )
 
-                                    // Tab 4: Ajustes
+                                    // Espacio central para el botón flotante del micrófono
+                                    Spacer(modifier = Modifier.width(60.dp))
+
+                                    // Pestaña 3: Cuadernos
+                                    BottomNavItem(
+                                        icon = Icons.Default.MenuBook,
+                                        label = "Cuadernos",
+                                        isSelected = currentTab == ApuntaTab.CUADERNOS,
+                                        onClick = { viewModel.selectTab(ApuntaTab.CUADERNOS) },
+                                        tag = "tab_cuadernos"
+                                    )
+
+                                    // Pestaña 4: Ajustes
                                     BottomNavItem(
                                         icon = Icons.Default.Settings,
                                         label = "Ajustes",
@@ -151,7 +153,7 @@ fun ApuntaApp(viewModel: ApuntaViewModel) {
                                 }
                             }
 
-                            // Large circular floating indigo microphone button, centered on top of bottom bar
+                            // Botón central flotante único con micrófono (acción principal en todas las pestañas)
                             Box(
                                 modifier = Modifier
                                     .offset(y = (-24).dp)
@@ -165,7 +167,7 @@ fun ApuntaApp(viewModel: ApuntaViewModel) {
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Mic,
-                                    contentDescription = "Hablar con Apunta",
+                                    contentDescription = "Dictar o escribir",
                                     tint = Color.White,
                                     modifier = Modifier.size(32.dp)
                                 )
@@ -179,11 +181,11 @@ fun ApuntaApp(viewModel: ApuntaViewModel) {
                                 viewModel = viewModel,
                                 onOpenNotebook = { viewModel.openNotebook(it) }
                             )
-                            ApuntaTab.CUADERNOS -> NotebooksScreen(
+                            ApuntaTab.CALENDARIO -> CalendarScreen(
                                 viewModel = viewModel,
                                 onOpenNotebook = { viewModel.openNotebook(it) }
                             )
-                            ApuntaTab.CALENDARIO -> CalendarScreen(
+                            ApuntaTab.CUADERNOS -> NotebooksScreen(
                                 viewModel = viewModel,
                                 onOpenNotebook = { viewModel.openNotebook(it) }
                             )
@@ -195,7 +197,7 @@ fun ApuntaApp(viewModel: ApuntaViewModel) {
                 }
             }
 
-            // Listening Bottom Sheet modal
+            // Hoja inferior única de acción principal
             if (isListeningSheetOpen) {
                 ListeningBottomSheet(
                     viewModel = viewModel,

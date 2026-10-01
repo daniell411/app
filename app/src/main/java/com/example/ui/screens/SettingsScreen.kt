@@ -22,9 +22,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Assistant
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
@@ -42,6 +44,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -57,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -73,16 +77,18 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val userName by viewModel.userName.collectAsState()
-    val themeMode by viewModel.themeMode.collectAsState()
-    val staggeredAlerts by viewModel.staggeredAlerts.collectAsState()
-    val morningSummaryEnabled by viewModel.morningSummaryEnabled.collectAsState()
-    val morningSummaryTime by viewModel.morningSummaryTime.collectAsState()
-    val onDeviceVoiceOnly by viewModel.onDeviceVoiceOnly.collectAsState()
-    val wakeWordEnabled by viewModel.wakeWordEnabled.collectAsState()
+    val userPreferences by viewModel.userPreferences.collectAsState()
 
-    var editingName by remember { mutableStateOf(userName) }
-    var selectedVoiceDialect by remember { mutableStateOf("Salvadoreño (es-SV)") }
+    val userName = userPreferences.userName
+    val themeMode = userPreferences.themeMode
+    val defaultLeadTime = userPreferences.defaultLeadTimeMinutes
+    val staggeredAlerts = userPreferences.staggeredAlerts
+    val wakeWordEnabled = userPreferences.wakeWordEnabled
+    val morningSummaryEnabled = userPreferences.morningSummaryEnabled
+    val morningSummaryTime = userPreferences.morningSummaryTime
+    val voiceDialect = userPreferences.voiceDialect
+
+    var editingName by remember(userName) { mutableStateOf(userName) }
 
     LazyColumn(
         modifier = modifier
@@ -99,130 +105,228 @@ fun SettingsScreen(
             )
         }
 
-        // Perfil y saludo
+        // SECCIÓN 1: PERFIL
         item {
-            SettingsSectionCard(title = "Perfil y saludo", icon = Icons.Default.Person) {
-                OutlinedTextField(
-                    value = editingName,
-                    onValueChange = {
-                        editingName = it
-                        viewModel.setUserName(it)
-                    },
-                    label = { Text("Tu nombre para el saludo") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("username_setting_field"),
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true
-                )
+            SettingsSectionCard(title = "Perfil", icon = Icons.Default.Person) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "Nombre",
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "Tu nombre usado para el saludo y la voz.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = editingName,
+                        onValueChange = {
+                            editingName = it
+                            viewModel.setUserName(it)
+                        },
+                        placeholder = { Text("Escribí tu nombre") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("username_setting_field"),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true
+                    )
+                }
             }
         }
 
-        // Métodos de activación
+        // SECCIÓN 2: VOZ
         item {
-            SettingsSectionCard(title = "Método de activación", icon = Icons.Default.Mic) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Botón / Atajo flotante", fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "Botón índigo central accesible en todas las pestañas",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = true,
-                            onCheckedChange = null,
-                            enabled = false,
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = ApuntaIndigo)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Asistente del sistema", fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "\"Oye Google, abrí Apunta\" / Acciones rápidas de voz",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = true,
-                            onCheckedChange = null,
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = ApuntaIndigo)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Palabra de activación (\"Oye Apunta\")", fontWeight = FontWeight.SemiBold)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = ApuntaOrange.copy(alpha = 0.2f)
-                                ) {
-                                    Text(
-                                        text = "Beta, solo Android",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = ApuntaOrange,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
+            SettingsSectionCard(title = "Voz", icon = Icons.Default.Mic) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    // Método de activación
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Método de activación", fontWeight = FontWeight.SemiBold)
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = ApuntaIndigo.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = "Botón flotante",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ApuntaIndigo,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
                             }
-                            Text(
-                                "Detección local continua en primer plano",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        Text(
+                            text = "Botón índigo central de micrófono accesible en todas las pestañas.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    // Palabra de activación
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Palabra de activación ('Ey Apunta')", fontWeight = FontWeight.SemiBold)
+                            Switch(
+                                checked = wakeWordEnabled,
+                                onCheckedChange = { viewModel.setWakeWordEnabled(it) },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = ApuntaIndigo)
                             )
                         }
-                        Switch(
-                            checked = wakeWordEnabled,
-                            onCheckedChange = { viewModel.setWakeWordEnabled(it) },
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = ApuntaIndigo)
+                        Text(
+                            text = "Activá el dictado diciendo 'Ey Apunta' mientras usás la app.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    // Lectura automática del resumen matutino
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Lectura automática del resumen matutino", fontWeight = FontWeight.SemiBold)
+                            Switch(
+                                checked = morningSummaryEnabled,
+                                onCheckedChange = { viewModel.setMorningSummaryEnabled(it) },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = ApuntaIndigo)
+                            )
+                        }
+                        Text(
+                            text = "Escuchá un resumen hablado de tus recordatorios al despertar ($morningSummaryTime).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (morningSummaryEnabled) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Button(
+                                onClick = { viewModel.speakMorningSummary() },
+                                colors = ButtonDefaults.buttonColors(containerColor = ApuntaIndigo),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Probar resumen con voz", fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    // Idioma de voz
+                    Column {
+                        Text("Idioma de voz", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = "Reconocimiento y entonación adaptados a tu región con voseo.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("es-SV" to "Español El Salvador (es-SV)", "es-419" to "Español Latino (es-419)").forEach { (code, label) ->
+                                FilterChip(
+                                    selected = voiceDialect == code,
+                                    onClick = { viewModel.setVoiceDialect(code) },
+                                    label = { Text(label, fontSize = 12.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = ApuntaIndigo,
+                                        selectedLabelColor = Color.White
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // SECCIÓN 3: RECORDATORIOS
+        item {
+            SettingsSectionCard(title = "Recordatorios", icon = Icons.Default.NotificationsActive) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    // Aviso previo
+                    Column {
+                        Text("Aviso previo predeterminado", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = "Tiempo de anticipación para las notificaciones programadas.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(0 to "A la hora", 15 to "15 min antes", 30 to "30 min antes", 60 to "1 hora antes").forEach { (mins, label) ->
+                                FilterChip(
+                                    selected = defaultLeadTime == mins,
+                                    onClick = { viewModel.setDefaultLeadTimeMinutes(mins) },
+                                    label = { Text(label, fontSize = 12.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = ApuntaIndigo,
+                                        selectedLabelColor = Color.White
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    // Insistencia / Alertas escalonadas
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Insistencia (Alertas escalonadas)", fontWeight = FontWeight.SemiBold)
+                            Switch(
+                                checked = staggeredAlerts,
+                                onCheckedChange = { viewModel.setStaggeredAlerts(it) },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = ApuntaIndigo)
+                            )
+                        }
+                        Text(
+                            text = "Aviso suave inicial, luego insistencia automática a los 5 y a los 10 minutos.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
         }
 
-        // Voz e idioma
+        // SECCIÓN 4: APARIENCIA
         item {
-            SettingsSectionCard(title = "Voz e idioma", icon = Icons.Default.Language) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SettingsSectionCard(title = "Apariencia", icon = Icons.Default.DarkMode) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Tema de la aplicación", fontWeight = FontWeight.SemiBold)
                     Text(
-                        text = "Dialecto y modismos:",
+                        text = "Elegí si la app sigue el sistema o usa un modo fijo.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(6.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf("Salvadoreño (es-SV)", "Latinoamérica (es-419)").forEach { dialect ->
+                        listOf("SYSTEM" to "Automático", "LIGHT" to "Claro", "DARK" to "Oscuro").forEach { (mode, label) ->
                             FilterChip(
-                                selected = selectedVoiceDialect == dialect,
-                                onClick = { selectedVoiceDialect = dialect },
-                                label = { Text(dialect, fontSize = 12.sp) },
+                                selected = themeMode == mode,
+                                onClick = { viewModel.setThemeMode(mode) },
+                                label = { Text(label, fontSize = 12.sp) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = ApuntaIndigo,
                                     selectedLabelColor = Color.White
-                                )
+                                ),
+                                shape = RoundedCornerShape(10.dp)
                             )
                         }
                     }
@@ -230,245 +334,131 @@ fun SettingsScreen(
             }
         }
 
-        // Tono, volumen y alertas escalonadas
+        // SECCIÓN 5: DATOS
         item {
-            SettingsSectionCard(title = "Alertas y notificaciones", icon = Icons.Default.NotificationsActive) {
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Alertas escalonadas", fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "Primero aviso suave; si no se marca como hecho, repite a los 5 y 10 minutos con más fuerza.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = staggeredAlerts,
-                            onCheckedChange = { viewModel.setStaggeredAlerts(it) },
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = ApuntaIndigo)
+            SettingsSectionCard(title = "Datos", icon = Icons.Default.Backup) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Exportar texto
+                    Column {
+                        Text("Exportar texto", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = "Copia tus recordatorios, notas y cuadernos en texto plano.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Button(
+                            onClick = {
+                                val text = viewModel.generateExportText()
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("Apunta Texto", text)
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(context, "Resumen copiado al portapapeles", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Copiar texto al portapapeles", fontSize = 12.sp)
+                        }
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text("Horario de \"No molestar\"", fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "Silenciar avisos entre 10:00 PM y 7:00 AM",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant
+                    // Exportar JSON
+                    Column {
+                        Text("Exportar JSON", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = "Genera una copia de seguridad completa en formato JSON.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Button(
+                            onClick = {
+                                val json = viewModel.generateExportJson()
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("Apunta JSON", json)
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(context, "JSON de respaldo copiado al portapapeles", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ApuntaIndigo),
+                            shape = RoundedCornerShape(10.dp)
                         ) {
+                            Text("Copiar JSON de respaldo", fontSize = 12.sp)
+                        }
+                    }
+
+                    // Restaurar / Ejemplos
+                    Column {
+                        Text("Restaurar / Ejemplos", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = "Probá la app con datos de muestra o limpiá los ejemplos de prueba.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.loadSampleData()
+                                    Toast.makeText(context, "Ejemplos cargados", Toast.LENGTH_SHORT).show()
+                                },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Cargar ejemplos", fontSize = 12.sp)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.clearSampleData()
+                                    Toast.makeText(context, "Ejemplos eliminados", Toast.LENGTH_SHORT).show()
+                                },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Borrar ejemplos", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // SECCIÓN 6: PRIVACIDAD
+        item {
+            SettingsSectionCard(title = "Privacidad", icon = Icons.Default.Security) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Almacenamiento y procesamiento transparente",
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Tus recordatorios, notas, fotos y checklists se guardan localmente en tu teléfono. El micrófono solo se abre cuando tocás el botón de dictar o activás la palabra clave. Tus notas y datos no salen de tu dispositivo, excepto cuando elegís usar reconocimiento de voz en la nube de Google o consultar la IA de Gemini, en cuyo caso solo se envía el texto de tu consulta de forma segura. No recopilamos ni vendemos tu información personal.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 18.sp
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = ApuntaGreen.copy(alpha = 0.12f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Info, contentDescription = null, tint = ApuntaGreen, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "22:00 - 07:00",
+                                text = "Sin rastreadores ni publicidad",
                                 style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                color = ApuntaGreen,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 }
-            }
-        }
-
-        // Resumen matutino hablado
-        item {
-            SettingsSectionCard(title = "Resumen matutino hablado", icon = Icons.Default.RecordVoiceOver) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Lectura automática por voz", fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "Síntesis de voz: \"Buenas, Daniel. Hoy tenés N cosas...\"",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = morningSummaryEnabled,
-                            onCheckedChange = { viewModel.setMorningSummaryEnabled(it) },
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = ApuntaIndigo)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Hora del resumen: $morningSummaryTime",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-
-                        Button(
-                            onClick = { viewModel.speakMorningSummary() },
-                            colors = ButtonDefaults.buttonColors(containerColor = ApuntaIndigo),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Probar voz", fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Respaldo y exportación
-        item {
-            SettingsSectionCard(title = "Respaldo y exportación", icon = Icons.Default.Backup) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "Exportá tus recordatorios, notas y checklists en texto o JSON para guardarlos o sincronizarlos.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("Apunta Backup JSON", "{\"app\": \"APUNTA\", \"version\": 1.0}")
-                                clipboard.setPrimaryClip(clip)
-                                Toast.makeText(context, "Respaldo JSON copiado al portapapeles", Toast.LENGTH_SHORT).show()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = ApuntaIndigo),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Exportar JSON", fontSize = 12.sp)
-                        }
-
-                        Button(
-                            onClick = {
-                                Toast.makeText(context, "Resumen preparado para compartir", Toast.LENGTH_SHORT).show()
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                contentColor = MaterialTheme.colorScheme.onSurface
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Exportar Texto", fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Privacidad
-        item {
-            SettingsSectionCard(title = "Privacidad y datos", icon = Icons.Default.Security) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Procesar voz en el dispositivo", fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "Usa el motor de reconocimiento local sin enviar grabaciones a servidores externos.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = onDeviceVoiceOnly,
-                            onCheckedChange = { viewModel.setOnDeviceVoiceOnly(it) },
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = ApuntaIndigo)
-                        )
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.Info,
-                                contentDescription = null,
-                                tint = ApuntaGreen,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Tus notas, audios y archivos se guardan exclusivamente en el almacenamiento local de tu teléfono.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Modo Claro / Oscuro / Automático
-        item {
-            SettingsSectionCard(title = "Tema de la aplicación", icon = Icons.Default.DarkMode) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf("SYSTEM" to "Automático", "LIGHT" to "Claro", "DARK" to "Oscuro").forEach { (mode, label) ->
-                        FilterChip(
-                            selected = themeMode == mode,
-                            onClick = { viewModel.setThemeMode(mode) },
-                            label = { Text(label, fontSize = 12.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = ApuntaIndigo,
-                                selectedLabelColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                    }
-                }
-            }
-        }
-
-        // About / Versión
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 14.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "APUNTA v1.0",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "Asistente de recordatorios por voz con cuadernos dedicados",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
             }
         }
     }
@@ -477,20 +467,28 @@ fun SettingsScreen(
 @Composable
 private fun SettingsSectionCard(
     title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     content: @Composable () -> Unit
 ) {
     Card(
-        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier.fillMaxWidth()
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 14.dp)
+            ) {
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .size(36.dp)
+                        .clip(CircleShape)
                         .background(ApuntaIndigo.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
                 ) {
@@ -505,10 +503,10 @@ private fun SettingsSectionCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
-            Spacer(modifier = Modifier.height(14.dp))
             content()
         }
     }

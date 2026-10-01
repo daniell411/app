@@ -12,6 +12,8 @@ import com.example.data.model.Notebook
 import com.example.data.model.NotebookWithCounts
 import com.example.data.model.Reminder
 import com.example.data.model.ReminderWithNotebook
+import com.example.data.preferences.UserPreferences
+import com.example.data.preferences.UserPreferencesRepository
 import com.example.notification.NotificationHelper
 import com.example.voice.ParsedVoiceResult
 import com.example.voice.SpeechManager
@@ -27,19 +29,23 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 
+// Ordering required by spec: Hoy · Calendario · Cuadernos · Ajustes
 enum class ApuntaTab {
     HOY,
-    CUADERNOS,
     CALENDARIO,
+    CUADERNOS,
     AJUSTES
 }
 
 class ApuntaViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val database = ApuntaDatabase.getDatabase(application, viewModelScope)
+    private val database = ApuntaDatabase.getDatabase(application)
     private val reminderDao = database.reminderDao()
     private val notebookDao = database.notebookDao()
     private val noteDao = database.noteDao()
@@ -49,6 +55,14 @@ class ApuntaViewModel(application: Application) : AndroidViewModel(application) 
 
     val speechManager = SpeechManager(application)
     val ttsManager = TtsManager(application)
+    val preferencesRepo = UserPreferencesRepository(application)
+
+    // DataStore User Preferences
+    val userPreferences: StateFlow<UserPreferences> = preferencesRepo.userPreferencesFlow.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        UserPreferences()
+    )
 
     // Current navigation state
     private val _currentTab = MutableStateFlow(ApuntaTab.HOY)
@@ -70,29 +84,11 @@ class ApuntaViewModel(application: Application) : AndroidViewModel(application) 
     private val _voiceFeedback = MutableStateFlow<String?>(null)
     val voiceFeedback: StateFlow<String?> = _voiceFeedback.asStateFlow()
 
-    // Settings State
-    private val _userName = MutableStateFlow("Daniel")
-    val userName: StateFlow<String> = _userName.asStateFlow()
+    // Filter for Hoy: "TODOS", "PENDIENTES", "COMPLETADOS"
+    private val _todayFilter = MutableStateFlow("TODOS")
+    val todayFilter: StateFlow<String> = _todayFilter.asStateFlow()
 
-    private val _themeMode = MutableStateFlow("SYSTEM") // SYSTEM, LIGHT, DARK
-    val themeMode: StateFlow<String> = _themeMode.asStateFlow()
-
-    private val _staggeredAlerts = MutableStateFlow(true)
-    val staggeredAlerts: StateFlow<Boolean> = _staggeredAlerts.asStateFlow()
-
-    private val _morningSummaryEnabled = MutableStateFlow(true)
-    val morningSummaryEnabled: StateFlow<Boolean> = _morningSummaryEnabled.asStateFlow()
-
-    private val _morningSummaryTime = MutableStateFlow("08:00")
-    val morningSummaryTime: StateFlow<String> = _morningSummaryTime.asStateFlow()
-
-    private val _onDeviceVoiceOnly = MutableStateFlow(true)
-    val onDeviceVoiceOnly: StateFlow<Boolean> = _onDeviceVoiceOnly.asStateFlow()
-
-    private val _wakeWordEnabled = MutableStateFlow(false)
-    val wakeWordEnabled: StateFlow<Boolean> = _wakeWordEnabled.asStateFlow()
-
-    // Search query for Notebooks & Archive
+    // Search query for Notebooks & Notes
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -116,54 +112,88 @@ class ApuntaViewModel(application: Application) : AndroidViewModel(application) 
         emptyList()
     )
 
-    // Flow of Reminders with associated Notebook and counts for Today's timeline
+    private data class NotebookContent(
+        val notes: List<Note>,
+        val attachments: List<Attachment>,
+        val links: List<AppLink>,
+        val checklists: List<ChecklistItem>
+    )
+
+    private val notebookContentFlow = combine(
+        noteDao.getAllNotes(),
+        attachmentDao.getAllAttachments(),
+        appLinkDao.getAllLinks(),
+        checklistDao.getAllChecklistItems()
+    ) { notes, attachments, links, checklists ->
+        NotebookContent(notes, attachments, links, checklists)
+    }
+
+    // Flow of Reminders with associated Notebook and true dynamic counts
     val todayReminders: StateFlow<List<ReminderWithNotebook>> = combine(
         reminderDao.getAllReminders(),
-        notebookDao.getAllNotebooks()
-    ) { reminders, notebooks ->
+        notebookDao.getAllNotebooks(),
+        notebookContentFlow
+    ) { reminders, notebooks, content ->
         val notebookMap = notebooks.associateBy { it.id }
+        val notesByNb = content.notes.groupBy { it.notebookId }
+        val attachmentsByNb = content.attachments.groupBy { it.notebookId }
+        val linksByNb = content.links.groupBy { it.notebookId }
+        val checklistsByNb = content.checklists.groupBy { it.notebookId }
 
-        // Filter and sort for Today:
-        // Upcoming/in-progress first (ordered by time), done items crossed-out and at the end
         val combined = reminders.map { reminder ->
-            val nb = reminder.notebookId?.let { notebookMap[it] }
+            val nbId = reminder.notebookId
+            val nb = nbId?.let { notebookMap[it] }
+            val nbNotes = nbId?.let { notesByNb[it] } ?: emptyList()
+            val nbAtt = nbId?.let { attachmentsByNb[it] } ?: emptyList()
+            val nbLinks = nbId?.let { linksByNb[it] } ?: emptyList()
+            val nbCheck = nbId?.let { checklistsByNb[it] } ?: emptyList()
+
             ReminderWithNotebook(
                 reminder = reminder,
                 notebook = nb,
-                notesCount = 1, // standard preview count or enriched
-                attachmentsCount = if (reminder.title.contains("informe", ignoreCase = true) || reminder.title.contains("datos", ignoreCase = true)) 1 else 0,
-                appLinksCount = if (reminder.notebookId == "nb-robotica") 2 else if (reminder.notebookId == "nb-datos") 1 else 0,
-                checklistCount = if (reminder.notebookId == "nb-robotica") 3 else if (reminder.notebookId == "nb-personal") 2 else 0,
-                checklistDoneCount = if (reminder.notebookId == "nb-robotica") 1 else 0
+                notesCount = nbNotes.size,
+                attachmentsCount = nbAtt.size,
+                appLinksCount = nbLinks.size,
+                checklistCount = nbCheck.size,
+                checklistDoneCount = nbCheck.count { it.done }
             )
         }
 
-        val pending = combined.filter { it.reminder.status != "DONE" }.sortedBy { it.reminder.datetime }
-        val done = combined.filter { it.reminder.status == "DONE" }.sortedBy { it.reminder.datetime }
-        pending + done
+        // Orden de la spec: Atrasados arriba, pendientes por hora, completados al final
+        val now = System.currentTimeMillis()
+        val overdue = combined.filter { it.reminder.status != "DONE" && it.reminder.datetime < now }.sortedBy { it.reminder.datetime }
+        val upcoming = combined.filter { it.reminder.status != "DONE" && it.reminder.datetime >= now }.sortedBy { it.reminder.datetime }
+        val done = combined.filter { it.reminder.status == "DONE" }.sortedByDescending { it.reminder.datetime }
+        overdue + upcoming + done
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Flow of Notebooks with counts
+    // Flow of Notebooks with actual item counts
     val notebooksWithCounts: StateFlow<List<NotebookWithCounts>> = combine(
         notebookDao.getAllNotebooks(),
-        reminderDao.getAllReminders()
-    ) { notebooks, reminders ->
+        reminderDao.getAllReminders(),
+        notebookContentFlow
+    ) { notebooks, reminders, content ->
+        val remindersByNb = reminders.groupBy { it.notebookId }
+        val notesByNb = content.notes.groupBy { it.notebookId }
+        val attachmentsByNb = content.attachments.groupBy { it.notebookId }
+        val linksByNb = content.links.groupBy { it.notebookId }
+        val checklistsByNb = content.checklists.groupBy { it.notebookId }
+
         notebooks.map { nb ->
-            val countRem = reminders.count { it.notebookId == nb.id }
-            val countNotes = if (nb.id == "nb-robotica") 2 else if (nb.id == "nb-datos") 2 else 1
-            val countAtt = if (nb.id == "nb-robotica") 1 else if (nb.id == "nb-datos") 1 else 0
-            val countLinks = if (nb.id == "nb-robotica") 2 else if (nb.id == "nb-datos") 1 else 0
-            val countCheck = if (nb.id == "nb-robotica") 3 else if (nb.id == "nb-personal") 2 else 1
-            val countDone = if (nb.id == "nb-robotica") 1 else 0
+            val nbReminders = remindersByNb[nb.id] ?: emptyList()
+            val nbNotes = notesByNb[nb.id] ?: emptyList()
+            val nbAtt = attachmentsByNb[nb.id] ?: emptyList()
+            val nbLinks = linksByNb[nb.id] ?: emptyList()
+            val nbCheck = checklistsByNb[nb.id] ?: emptyList()
 
             NotebookWithCounts(
                 notebook = nb,
-                remindersCount = countRem,
-                notesCount = countNotes,
-                attachmentsCount = countAtt,
-                appLinksCount = countLinks,
-                checklistCount = countCheck,
-                checklistDoneCount = countDone
+                remindersCount = nbReminders.size,
+                notesCount = nbNotes.size,
+                attachmentsCount = nbAtt.size,
+                appLinksCount = nbLinks.size,
+                checklistCount = nbCheck.size,
+                checklistDoneCount = nbCheck.count { it.done }
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -195,6 +225,10 @@ class ApuntaViewModel(application: Application) : AndroidViewModel(application) 
 
     fun closeNotebook() {
         _selectedNotebookId.value = null
+    }
+
+    fun setTodayFilter(filter: String) {
+        _todayFilter.value = filter
     }
 
     fun setSearchQuery(query: String) {
@@ -249,7 +283,6 @@ class ApuntaViewModel(application: Application) : AndroidViewModel(application) 
         when (parsed.commandType) {
             VoiceCommandType.CREATE_REMINDER -> {
                 if (parsed.isMissingTime && parsed.title.isNotBlank()) {
-                    // Conversational voice question: ask "¿A qué hora?"
                     _voiceDraft.value = parsed
                     _conversationalQuestion.value = "¿A qué hora querés que te recuerde?"
                     ttsManager.speak("¿A qué hora?")
@@ -368,7 +401,7 @@ class ApuntaViewModel(application: Application) : AndroidViewModel(application) 
                 repeatRule = "NONE",
                 status = "PENDING",
                 notebookId = targetNotebookId,
-                escalated = _staggeredAlerts.value
+                escalated = userPreferences.value.staggeredAlerts
             )
 
             reminderDao.insertReminder(newReminder)
@@ -499,7 +532,7 @@ class ApuntaViewModel(application: Application) : AndroidViewModel(application) 
 
     // Spoken Morning Summary feature (Resumen matutino hablado)
     fun speakMorningSummary() {
-        val user = _userName.value
+        val user = userPreferences.value.userName.ifBlank { "amigo" }
         val pendingCount = todayReminders.value.count { it.reminder.status != "DONE" }
         val greeting = getGreetingTime()
 
@@ -516,7 +549,7 @@ class ApuntaViewModel(application: Application) : AndroidViewModel(application) 
         ttsManager.speak(text)
     }
 
-    private fun getGreetingTime(): String {
+    fun getGreetingTime(): String {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         return when (hour) {
             in 5..11 -> "Buen día"
@@ -525,33 +558,137 @@ class ApuntaViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // Settings modifiers
+    // Sample data loaders
+    fun loadSampleData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            ApuntaDatabase.seedSampleData(database)
+        }
+    }
+
+    fun clearSampleData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            ApuntaDatabase.clearSampleData(database)
+        }
+    }
+
+    // Data export functions
+    fun generateExportText(): String {
+        val reminders = allReminders.value
+        val notebooks = allNotebooks.value
+        val sb = StringBuilder()
+        sb.append("=== APUNTA - RESPALDO DE RECORDATORIOS Y CUADERNOS ===\n")
+        sb.append("Fecha de exportación: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())}\n\n")
+
+        sb.append("--- RECORDATORIOS (${reminders.size}) ---\n")
+        if (reminders.isEmpty()) {
+            sb.append("Sin recordatorios registrados.\n")
+        } else {
+            reminders.forEach { r ->
+                val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(r.datetime))
+                val state = if (r.status == "DONE") "[COMPLETADO]" else "[PENDIENTE]"
+                sb.append("• $state ${r.title} - $dateStr\n")
+            }
+        }
+
+        sb.append("\n--- CUADERNOS (${notebooks.size}) ---\n")
+        if (notebooks.isEmpty()) {
+            sb.append("Sin cuadernos creados.\n")
+        } else {
+            notebooks.forEach { nb ->
+                sb.append("• Cuaderno: ${nb.name} (Categoría: ${nb.label})\n")
+            }
+        }
+        return sb.toString()
+    }
+
+    fun generateExportJson(): String {
+        val reminders = allReminders.value
+        val notebooks = allNotebooks.value
+        val sb = StringBuilder()
+        sb.append("{\n")
+        sb.append("  \"version\": 1,\n")
+        sb.append("  \"exportedAt\": ${System.currentTimeMillis()},\n")
+        sb.append("  \"notebooks\": [\n")
+        notebooks.forEachIndexed { i, nb ->
+            sb.append("    {\"id\": \"${nb.id}\", \"name\": \"${escapeJson(nb.name)}\", \"color\": \"${nb.color}\", \"label\": \"${escapeJson(nb.label)}\"}")
+            if (i < notebooks.size - 1) sb.append(",")
+            sb.append("\n")
+        }
+        sb.append("  ],\n")
+        sb.append("  \"reminders\": [\n")
+        reminders.forEachIndexed { i, r ->
+            sb.append("    {\"id\": \"${r.id}\", \"title\": \"${escapeJson(r.title)}\", \"datetime\": ${r.datetime}, \"status\": \"${r.status}\", \"notebookId\": \"${r.notebookId ?: ""}\"}")
+            if (i < reminders.size - 1) sb.append(",")
+            sb.append("\n")
+        }
+        sb.append("  ]\n")
+        sb.append("}")
+        return sb.toString()
+    }
+
+    private fun escapeJson(value: String): String {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+    }
+
+    // Settings modifiers backed by DataStore
+    fun completeOnboarding(name: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesRepo.completeOnboarding(name)
+        }
+    }
+
     fun setUserName(name: String) {
-        _userName.value = name
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesRepo.setUserName(name)
+        }
     }
 
     fun setThemeMode(mode: String) {
-        _themeMode.value = mode
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesRepo.setThemeMode(mode)
+        }
+    }
+
+    fun setDefaultLeadTimeMinutes(minutes: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesRepo.setDefaultLeadTimeMinutes(minutes)
+        }
     }
 
     fun setStaggeredAlerts(enabled: Boolean) {
-        _staggeredAlerts.value = enabled
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesRepo.setStaggeredAlerts(enabled)
+        }
     }
 
     fun setMorningSummaryEnabled(enabled: Boolean) {
-        _morningSummaryEnabled.value = enabled
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesRepo.setMorningSummaryEnabled(enabled)
+        }
     }
 
     fun setMorningSummaryTime(time: String) {
-        _morningSummaryTime.value = time
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesRepo.setMorningSummaryTime(time)
+        }
     }
 
     fun setOnDeviceVoiceOnly(enabled: Boolean) {
-        _onDeviceVoiceOnly.value = enabled
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesRepo.setOnDeviceVoiceOnly(enabled)
+        }
     }
 
     fun setWakeWordEnabled(enabled: Boolean) {
-        _wakeWordEnabled.value = enabled
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesRepo.setWakeWordEnabled(enabled)
+        }
+    }
+
+    fun setVoiceDialect(dialect: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesRepo.setVoiceDialect(dialect)
+        }
     }
 
     override fun onCleared() {
