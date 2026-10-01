@@ -1,0 +1,6 @@
+{
+  "name": "APUNTA",
+  "description": "Asistente de recordatorios por voz donde cada recordatorio tiene su propio cuaderno con notas, archivos, links y checklist.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
